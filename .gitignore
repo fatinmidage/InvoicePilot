@@ -96,3 +96,27 @@ temp/
 
 # Diagnostic reports
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# Cursor editor
+.cursor/
+
+# Additional IDE/Editor files
+.fleet/
+.history/
+.devcontainer/
+
+# Additional OS files
+*.swp
+*.swo
+.fseventsd/
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Additional build/dist directories
+target/
+src-tauri/target/

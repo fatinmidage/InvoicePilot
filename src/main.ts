@@ -1,137 +1,77 @@
+// 导入Tauri API
+import { invoke } from '@tauri-apps/api/core';
+
 // 文件接口定义
 interface FileItem {
   id: string;
   name: string;
-  size: string;
-  date: string;
+  path: string;
+  size: number;
+  modified: string;
+  amount?: number;
+  suggested_name?: string;
   selected: boolean;
+}
+
+// 重命名操作接口
+interface RenameOperation {
+  old_path: string;
+  new_path: string;
+  amount?: number;
+}
+
+// 重命名结果接口
+interface RenameResult {
+  success: boolean;
+  message: string;
+  processed_files: number;
+  failed_files: string[];
 }
 
 // 应用状态
 class AppState {
   files: FileItem[] = [];
   selectedFiles: Set<string> = new Set();
+  currentDirectory: string = "";
 
   constructor() {
-    this.initializeFiles();
+    // 不在构造函数中调用异步方法
   }
 
-  // 初始化文件列表（模拟数据）
-  initializeFiles() {
-    this.files = [
-      {
-        id: "1",
-        name: "invoice_2024_001.pdf",
-        size: "245 KB",
-        date: "2024-01-15 10:30",
+  // 初始化文件列表（使用真实API）
+  async initializeFiles() {
+    try {
+      // 获取默认目录
+      this.currentDirectory = await invoke<string>('select_directory');
+      await this.loadFiles();
+    } catch (error) {
+      console.error('初始化文件列表失败:', error);
+      // 如果失败，使用默认目录
+      this.currentDirectory = "/Users/Documents";
+    }
+  }
+
+  // 加载文件列表
+  async loadFiles() {
+    try {
+      const files = await invoke<FileItem[]>('scan_pdf_files', { 
+        directory: this.currentDirectory 
+      });
+      
+      this.files = files.map(file => ({
+        ...file,
         selected: false
-      },
-      {
-        id: "2",
-        name: "bill_company_abc.pdf",
-        size: "189 KB",
-        date: "2024-01-16 14:22",
-        selected: false
-      },
-      {
-        id: "3",
-        name: "receipt_jan_2024.pdf",
-        size: "156 KB",
-        date: "2024-01-20 09:15",
-        selected: false
-      },
-      {
-        id: "4",
-        name: "invoice_supplier_xyz_20240125.pdf",
-        size: "298 KB",
-        date: "2024-01-25 16:45",
-        selected: false
-      },
-      {
-        id: "5",
-        name: "billing_statement_feb.pdf",
-        size: "203 KB",
-        date: "2024-02-01 11:30",
-        selected: false
-      },
-      {
-        id: "6",
-        name: "invoice_march_2024_company_def.pdf",
-        size: "324 KB",
-        date: "2024-03-05 09:45",
-        selected: false
-      },
-      {
-        id: "7",
-        name: "receipt_grocery_store_march.pdf",
-        size: "167 KB",
-        date: "2024-03-10 14:20",
-        selected: false
-      },
-      {
-        id: "8",
-        name: "utility_bill_march_2024.pdf",
-        size: "234 KB",
-        date: "2024-03-15 16:30",
-        selected: false
-      },
-      {
-        id: "9",
-        name: "invoice_consulting_services_q1.pdf",
-        size: "412 KB",
-        date: "2024-03-20 11:15",
-        selected: false
-      },
-      {
-        id: "10",
-        name: "tax_document_personal_2024.pdf",
-        size: "567 KB",
-        date: "2024-03-25 13:50",
-        selected: false
-      },
-      {
-        id: "11",
-        name: "invoice_office_supplies_march.pdf",
-        size: "278 KB",
-        date: "2024-03-28 08:30",
-        selected: false
-      },
-      {
-        id: "12",
-        name: "receipt_restaurant_business_dinner.pdf",
-        size: "143 KB",
-        date: "2024-04-02 19:45",
-        selected: false
-      },
-      {
-        id: "13",
-        name: "invoice_software_license_annual.pdf",
-        size: "389 KB",
-        date: "2024-04-05 10:20",
-        selected: false
-      },
-      {
-        id: "14",
-        name: "billing_statement_april_2024.pdf",
-        size: "312 KB",
-        date: "2024-04-10 15:30",
-        selected: false
-      },
-      {
-        id: "15",
-        name: "invoice_marketing_campaign_q2.pdf",
-        size: "456 KB",
-        date: "2024-04-15 12:00",
-        selected: false
-      },
-      {
-        id: "16",
-        name: "这是一个非常长的PDF文件名用于测试显示效果当文件名超过60个字符时会发生什么情况测试长度是否足够显示完整内容！.pdf",
-        size: "789 KB",
-        date: "2024-04-20 16:30",
-        selected: false
-      }
-    ];
+      }));
+    } catch (error) {
+      console.error('加载文件列表失败:', error);
+      this.files = [];
+    }
+  }
+
+  // 设置当前目录
+  async setCurrentDirectory(directory: string) {
+    this.currentDirectory = directory;
+    await this.loadFiles();
   }
 
   // 切换文件选择状态
@@ -232,12 +172,18 @@ class UIManager {
     this.appState.files.forEach(file => {
       const fileItemElement = document.createElement("div");
       fileItemElement.className = `file-item ${file.selected ? "selected" : ""}`;
+      
+      // 格式化文件大小
+      const formattedSize = this.formatFileSize(file.size);
+      // 格式化修改时间
+      const formattedDate = this.formatDate(file.modified);
+      
       fileItemElement.innerHTML = `
         <input type="checkbox" class="checkbox file-checkbox" data-file-id="${file.id}" ${file.selected ? "checked" : ""}>
         <div class="file-icon">📄</div>
         <div class="file-info">
           <div class="file-name" title="${file.name}">${file.name}</div>
-          <div class="file-meta">${file.size} • ${file.date}</div>
+          <div class="file-meta">${formattedSize} • ${formattedDate}</div>
         </div>
       `;
 
@@ -257,6 +203,28 @@ class UIManager {
 
       this.fileListElement.appendChild(fileItemElement);
     });
+  }
+
+  // 格式化文件大小
+  private formatFileSize(bytes: number): string {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  }
+
+  // 格式化日期
+  private formatDate(dateString: string): string {
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('zh-CN') + ' ' + date.toLocaleTimeString('zh-CN', {
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch {
+      return dateString;
+    }
   }
 
   // 渲染统计信息
@@ -295,14 +263,11 @@ class UIManager {
     } else {
       this.previewArea.innerHTML = `
         <div class="preview-content">
-          <h4 style="margin-bottom: 12px; font-size: 0.85rem; color: var(--color-text-primary);">
-            重命名预览 (${selectedFiles.length} 个文件)
-          </h4>
           <div class="preview-list">
             ${selectedFiles.map(file => `
               <div class="preview-item" style="margin-bottom: 8px; padding: 8px; background-color: var(--color-surface-interactive); border-radius: 4px; font-size: 0.75rem;">
                 <div style="color: var(--color-text-secondary); margin-bottom: 4px;">原名：${file.name}</div>
-                <div style="color: var(--color-text-primary); font-weight: 500;">新名：${this.generateNewName(file.name)}</div>
+                <div style="color: var(--color-text-primary); font-weight: 500;">新名：${this.generateNewName(file)}</div>
               </div>
             `).join("")}
           </div>
@@ -311,21 +276,17 @@ class UIManager {
     }
   }
 
-  // 生成新文件名（模拟智能重命名）
-  private generateNewName(originalName: string): string {
-    // 简单的重命名规则示例
-    const baseName = originalName.replace(".pdf", "");
-    const currentDate = new Date().toISOString().split("T")[0];
-    
-    if (baseName.includes("invoice")) {
-      return `发票_${currentDate}_${Math.random().toString(36).substr(2, 4).toUpperCase()}.pdf`;
-    } else if (baseName.includes("bill")) {
-      return `账单_${currentDate}_${Math.random().toString(36).substr(2, 4).toUpperCase()}.pdf`;
-    } else if (baseName.includes("receipt")) {
-      return `收据_${currentDate}_${Math.random().toString(36).substr(2, 4).toUpperCase()}.pdf`;
-    } else {
-      return `文件_${currentDate}_${Math.random().toString(36).substr(2, 4).toUpperCase()}.pdf`;
+  // 生成新文件名（基于PDF解析结果）
+  private generateNewName(file: FileItem): string {
+    if (file.suggested_name) {
+      return file.suggested_name;
     }
+    
+    if (file.amount) {
+      return `${file.amount.toFixed(2)}元_发票.pdf`;
+    }
+    
+    return "未知金额_发票.pdf";
   }
 
   // 切换文件选择状态
@@ -335,17 +296,22 @@ class UIManager {
   }
 
   // 刷新文件列表
-  private refreshFiles() {
+  private async refreshFiles() {
     console.log("刷新文件列表");
-    // 这里可以调用Tauri命令获取实际的文件列表
-    // await invoke("get_pdf_files");
-    this.render();
+    try {
+      await this.appState.loadFiles();
+      this.render();
+    } catch (error) {
+      console.error("刷新文件列表失败:", error);
+      alert("刷新文件列表失败");
+    }
   }
 
   // 打开设置
   private openSettings() {
     console.log("打开设置");
     // 这里可以打开设置对话框
+    alert("设置功能暂未实现");
   }
 
   // 开始重命名
@@ -356,31 +322,49 @@ class UIManager {
     console.log("开始重命名", selectedFiles);
     
     try {
-      // 这里调用Tauri命令执行重命名
-      // const result = await invoke("rename_files", { files: selectedFiles });
-      
-      // 模拟重命名过程
       this.startRenameButton.disabled = true;
       this.startRenameButton.textContent = "重命名中...";
       
-      // 模拟延时
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // 准备重命名操作
+      const renameOperations: RenameOperation[] = selectedFiles.map(file => {
+        const directory = file.path.substring(0, file.path.lastIndexOf('/'));
+        const newFileName = file.suggested_name || `${file.amount?.toFixed(2) || '未知金额'}元_发票.pdf`;
+        const newPath = `${directory}/${newFileName}`;
+        
+        return {
+          old_path: file.path,
+          new_path: newPath,
+          amount: file.amount
+        };
+      });
       
-      // 重命名完成后清空选择
-      this.appState.selectedFiles.clear();
-      this.appState.files.forEach(file => file.selected = false);
+      // 执行重命名
+      const result = await invoke<RenameResult>('execute_rename', { 
+        renames: renameOperations 
+      });
       
-      this.render();
-      
-      // 显示成功消息
-      alert(`成功重命名 ${selectedFiles.length} 个文件！`);
+      if (result.success) {
+        // 重命名成功后清空选择并刷新
+        this.appState.selectedFiles.clear();
+        this.appState.files.forEach(file => file.selected = false);
+        await this.appState.loadFiles();
+        this.render();
+        
+        alert(`${result.message}`);
+      } else {
+        alert(`重命名部分失败: ${result.message}`);
+        if (result.failed_files.length > 0) {
+          console.error("失败的文件:", result.failed_files);
+        }
+      }
       
     } catch (error) {
       console.error("重命名失败:", error);
       alert("重命名失败，请检查文件权限或重试");
     } finally {
       this.startRenameButton.disabled = false;
-      this.startRenameButton.textContent = "开始重命名 (0)";
+      const selectedCount = this.appState.getSelectedCount();
+      this.startRenameButton.textContent = `开始重命名 (${selectedCount})`;
     }
   }
 
@@ -389,16 +373,45 @@ class UIManager {
     this.renderFileList();
     this.renderStats();
     this.renderPreview();
+    this.updateDirectoryDisplay();
+  }
+
+  // 更新目录显示
+  private updateDirectoryDisplay() {
+    const directoryElement = document.getElementById("current-directory");
+    const fileCountElement = document.getElementById("file-count");
+    
+    if (directoryElement) {
+      directoryElement.textContent = this.appState.currentDirectory || "未选择目录";
+    }
+    
+    if (fileCountElement) {
+      const totalFiles = this.appState.getTotalCount();
+      fileCountElement.textContent = `${totalFiles} 个PDF文件`;
+    }
   }
 }
 
 // 应用初始化
-window.addEventListener("DOMContentLoaded", () => {
-  const appState = new AppState();
-  const uiManager = new UIManager(appState);
-  
-  // 将uiManager保存到全局作用域以供调试使用
-  (window as any).uiManager = uiManager;
-  
-  console.log("PDF发票文件重命名工具已启动");
+window.addEventListener("DOMContentLoaded", async () => {
+  try {
+    const appState = new AppState();
+    
+    // 等待异步初始化完成
+    await appState.initializeFiles();
+    
+    const uiManager = new UIManager(appState);
+    
+    // 将uiManager保存到全局作用域以供调试使用
+    (window as any).uiManager = uiManager;
+    
+    console.log("PDF发票文件重命名工具已启动");
+  } catch (error) {
+    console.error("应用初始化失败:", error);
+    // 如果初始化失败，仍然创建UI但使用空状态
+    const appState = new AppState();
+    appState.files = [];
+    const uiManager = new UIManager(appState);
+    (window as any).uiManager = uiManager;
+  }
 });
