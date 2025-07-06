@@ -67,7 +67,7 @@ body {
   background-color: var(--color-bg-primary);
 }
 
-/* 顶部标题栏 */
+/* 顶部导航栏 */
 .header {
   display: flex;
   justify-content: space-between;
@@ -75,12 +75,14 @@ body {
   padding: var(--spacing-sm) var(--spacing-lg);
   background-color: var(--color-surface-default);
   border-bottom: 1px solid var(--color-border-default);
+  min-height: 60px; /* 确保有足够高度容纳Tab按钮 */
 }
 
 .header-left {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
+  flex: 1; /* 让左侧占据剩余空间 */
   user-select: none;
   -webkit-user-select: none;
   -moz-user-select: none;
@@ -130,6 +132,72 @@ body {
 
 .header-btn:hover {
   background-color: var(--color-surface-interactive);
+}
+
+/* Tab导航样式 */
+.tab-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.tab-button {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: none;
+  background: none;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-body);
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  position: relative;
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+.tab-button:hover {
+  color: var(--color-text-primary);
+  background-color: var(--color-surface-interactive);
+}
+
+.tab-button.active {
+  color: var(--color-icon-primary);
+  background-color: var(--color-selected-bg);
+  border: 1px solid var(--color-selected-border);
+}
+
+.tab-icon {
+  font-size: 1.1rem;
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+/* Tab内容容器 */
+.tab-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.tab-panel {
+  flex: 1;
+  display: none;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.tab-panel.active {
+  display: flex;
 }
 
 /* 目录显示区域 */

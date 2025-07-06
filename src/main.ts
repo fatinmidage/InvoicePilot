@@ -28,6 +28,52 @@ interface RenameResult {
   failed_files: string[];
 }
 
+// Tab管理器
+class TabManager {
+  private currentTab: string = 'pdf';
+  private onTabChange: (tab: string) => void;
+
+  constructor(onTabChange: (tab: string) => void) {
+    this.onTabChange = onTabChange;
+    this.bindEvents();
+  }
+
+  private bindEvents() {
+    const tabButtons = document.querySelectorAll('.tab-button');
+    tabButtons.forEach(button => {
+      button.addEventListener('click', () => {
+        const tabId = button.getAttribute('data-tab');
+        if (tabId) {
+          this.switchTab(tabId);
+        }
+      });
+    });
+  }
+
+  private switchTab(tabId: string) {
+    if (this.currentTab === tabId) return;
+
+    // 更新按钮状态
+    document.querySelectorAll('.tab-button').forEach(button => {
+      button.classList.remove('active');
+    });
+    document.querySelector(`[data-tab="${tabId}"]`)?.classList.add('active');
+
+    // 更新面板显示
+    document.querySelectorAll('.tab-panel').forEach(panel => {
+      panel.classList.remove('active');
+    });
+    document.getElementById(`${tabId}-tab`)?.classList.add('active');
+
+    this.currentTab = tabId;
+    this.onTabChange(tabId);
+  }
+
+  getCurrentTab(): string {
+    return this.currentTab;
+  }
+}
+
 // 应用状态
 class AppState {
   files: FileItem[] = [];
@@ -448,6 +494,18 @@ class UIManager {
     this.updateDirectoryDisplay();
   }
 
+  // 公共刷新方法
+  public async refresh() {
+    console.log("刷新文件列表");
+    try {
+      await this.appState.loadFiles();
+      this.render();
+    } catch (error) {
+      console.error("刷新文件列表失败:", error);
+      alert("刷新文件列表失败");
+    }
+  }
+
   // 更新目录显示
   private updateDirectoryDisplay() {
     const directoryElement = document.getElementById("current-directory");
@@ -474,16 +532,38 @@ window.addEventListener("DOMContentLoaded", async () => {
     
     const uiManager = new UIManager(appState);
     
-    // 将uiManager保存到全局作用域以供调试使用
-    (window as any).uiManager = uiManager;
+    // 初始化Tab管理器
+    const tabManager = new TabManager((tabId: string) => {
+      console.log(`切换到标签页: ${tabId}`);
+      // 根据当前标签页更新刷新按钮的行为
+      const refreshBtn = document.getElementById("refresh-btn");
+      if (refreshBtn) {
+                 refreshBtn.onclick = () => {
+           if (tabId === 'pdf') {
+             uiManager.refresh();
+           } else {
+             // 图片标签页的刷新逻辑将在后续实现
+             console.log('图片标签页刷新功能待实现');
+           }
+         };
+      }
+    });
     
-    console.log("PDF发票文件重命名工具已启动");
+    // 将管理器保存到全局作用域以供调试使用
+    (window as any).uiManager = uiManager;
+    (window as any).tabManager = tabManager;
+    
+    console.log("InvoicePilot 应用已启动");
   } catch (error) {
     console.error("应用初始化失败:", error);
     // 如果初始化失败，仍然创建UI但使用空状态
     const appState = new AppState();
     appState.files = [];
     const uiManager = new UIManager(appState);
+    const tabManager = new TabManager((tabId: string) => {
+      console.log(`切换到标签页: ${tabId}`);
+    });
     (window as any).uiManager = uiManager;
+    (window as any).tabManager = tabManager;
   }
 });
