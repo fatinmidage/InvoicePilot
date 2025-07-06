@@ -327,9 +327,14 @@ class UIManager {
       
       // 准备重命名操作
       const renameOperations: RenameOperation[] = selectedFiles.map(file => {
-        const directory = file.path.substring(0, file.path.lastIndexOf('/'));
+        // 处理Windows和Unix路径分隔符
+        const lastSeparatorIndex = Math.max(file.path.lastIndexOf('/'), file.path.lastIndexOf('\\'));
+        const directory = file.path.substring(0, lastSeparatorIndex);
+        const separator = file.path.includes('\\') ? '\\' : '/';
         const newFileName = file.suggested_name || `${file.amount?.toFixed(2) || '未知金额'}元_发票.pdf`;
-        const newPath = `${directory}/${newFileName}`;
+        const newPath = `${directory}${separator}${newFileName}`;
+        
+        console.log(`重命名操作: ${file.path} -> ${newPath}`);
         
         return {
           old_path: file.path,
@@ -352,10 +357,12 @@ class UIManager {
         
         alert(`${result.message}`);
       } else {
-        alert(`重命名部分失败: ${result.message}`);
+        let errorMessage = `重命名部分失败: ${result.message}`;
         if (result.failed_files.length > 0) {
+          errorMessage += "\n\n失败详情:\n" + result.failed_files.join("\n");
           console.error("失败的文件:", result.failed_files);
         }
+        alert(errorMessage);
       }
       
     } catch (error) {
