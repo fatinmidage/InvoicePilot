@@ -20,7 +20,12 @@ impl PdfParser {
 
     /// 从文本中提取金额信息
     pub fn extract_amount_from_text(&self, text: &str) -> Option<f64> {
-        // 尝试多种金额提取方法
+        // 首先尝试提取价税合计金额（最重要的金额）
+        if let Some(amount) = self.parse_total_amount(text) {
+            return Some(amount);
+        }
+        
+        // 其次尝试多种金额提取方法
         if let Some(amount) = self.parse_decimal_amount(text) {
             return Some(amount);
         }
@@ -31,6 +36,70 @@ impl PdfParser {
         
         if let Some(amount) = self.parse_currency_amount(text) {
             return Some(amount);
+        }
+        
+        None
+    }
+
+    /// 解析价税合计金额（发票总金额）
+    fn parse_total_amount(&self, text: &str) -> Option<f64> {
+        // 首先查找价税合计相关的行
+        let lines: Vec<&str> = text.lines().collect();
+        
+        for (i, line) in lines.iter().enumerate() {
+            // 查找包含"价税合计"、"合计"等关键词的行
+            if line.contains("价税合计") || line.contains("合计") {
+                // 在当前行和后续几行中查找金额
+                for j in i..std::cmp::min(i + 3, lines.len()) {
+                    if let Some(amount) = self.extract_amount_from_line(lines[j]) {
+                        return Some(amount);
+                    }
+                }
+            }
+        }
+        
+        // 如果没有找到价税合计，查找包含中文大写金额的行
+        // 通常发票会有"叁佰壹拾柒圆陆角整 ¥317.60"这样的格式
+        for line in lines {
+            if line.contains("圆") && line.contains("角") && line.contains("整") {
+                // 在这样的行中查找¥符号后的数字
+                if let Some(amount) = self.extract_amount_from_line(line) {
+                    return Some(amount);
+                }
+            }
+        }
+        
+        None
+    }
+
+    /// 从单行文本中提取金额
+    fn extract_amount_from_line(&self, line: &str) -> Option<f64> {
+        // 匹配¥符号后的金额
+        let patterns = vec![
+            r"¥(\d+(?:\.\d{2})?)",
+            r"￥(\d+(?:\.\d{2})?)",
+            r"(\d+(?:\.\d{2})?)元",
+            r"金额[：:]\s*(\d+(?:\.\d{2})?)",
+            r"合计[：:]\s*(\d+(?:\.\d{2})?)",
+        ];
+
+        for pattern in patterns {
+            if let Ok(re) = regex::Regex::new(pattern) {
+                // 找到所有匹配项，取最后一个（通常是总金额）
+                let mut matches: Vec<f64> = Vec::new();
+                for caps in re.captures_iter(line) {
+                    if let Some(amount_str) = caps.get(1) {
+                        if let Ok(amount) = amount_str.as_str().parse::<f64>() {
+                            matches.push(amount);
+                        }
+                    }
+                }
+                
+                if !matches.is_empty() {
+                    // 如果有多个匹配，取最大的那个（通常是含税总额）
+                    return Some(*matches.iter().max_by(|a, b| a.partial_cmp(b).unwrap())?);
+                }
+            }
         }
         
         None
