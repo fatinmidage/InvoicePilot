@@ -62,9 +62,14 @@ class AppState {
         ...file,
         selected: false
       }));
+      
+      // 清空选择状态
+      this.selectedFiles.clear();
     } catch (error) {
       console.error('加载文件列表失败:', error);
       this.files = [];
+      // 发生错误时也要清空选择状态
+      this.selectedFiles.clear();
     }
   }
 
@@ -263,14 +268,12 @@ class UIManager {
     } else {
       this.previewArea.innerHTML = `
         <div class="preview-content">
-          <div class="preview-list">
-            ${selectedFiles.map(file => `
-              <div class="preview-item" style="margin-bottom: 8px; padding: 8px; background-color: var(--color-surface-interactive); border-radius: 4px; font-size: 0.75rem;">
-                <div style="color: var(--color-text-secondary); margin-bottom: 4px;">原名：${file.name}</div>
-                <div style="color: var(--color-text-primary); font-weight: 500;">新名：${this.generateNewName(file)}</div>
-              </div>
-            `).join("")}
-          </div>
+          ${selectedFiles.map(file => `
+            <div class="preview-item">
+              <div class="original-name">原名：${file.name}</div>
+              <div class="new-name">新名：${this.generateNewName(file)}</div>
+            </div>
+          `).join("")}
         </div>
       `;
     }
@@ -310,8 +313,70 @@ class UIManager {
   // 打开设置
   private openSettings() {
     console.log("打开设置");
-    // 这里可以打开设置对话框
-    alert("设置功能暂未实现");
+    
+    // 创建设置对话框
+    const settingsHTML = `
+      <div class="settings-overlay">
+        <div class="settings-modal">
+          <div class="settings-header">
+            <h3>关于 InvoicePilot</h3>
+            <button class="close-btn" id="close-settings">×</button>
+          </div>
+          <div class="settings-content">
+            <div class="app-info">
+              <div class="app-icon-large">📄</div>
+              <div class="app-details">
+                <h4>InvoicePilot</h4>
+                <p class="app-description">PDF发票文件重命名工具</p>
+                <div class="version-info">
+                  <p><strong>版本：</strong>0.1.0</p>
+                  <p><strong>作者：</strong>Wind</p>
+                  <p><strong>邮箱：</strong>fg1048596@gmail.com</p>
+                </div>
+              </div>
+            </div>
+            <div class="features-info">
+              <h5>功能特点</h5>
+              <ul>
+                <li>智能识别PDF发票内容</li>
+                <li>自动提取金额信息</li>
+                <li>批量重命名文件</li>
+                <li>支持多种文件格式</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    
+    // 添加对话框到页面
+    const settingsElement = document.createElement('div');
+    settingsElement.innerHTML = settingsHTML;
+    document.body.appendChild(settingsElement);
+    
+    // 绑定关闭事件
+    const closeBtn = document.getElementById('close-settings');
+    const overlay = document.querySelector('.settings-overlay') as HTMLElement;
+    
+    const closeSettings = () => {
+      document.body.removeChild(settingsElement);
+    };
+    
+    closeBtn?.addEventListener('click', closeSettings);
+    overlay?.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        closeSettings();
+      }
+    });
+    
+    // ESC键关闭
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        closeSettings();
+        document.removeEventListener('keydown', handleEsc);
+      }
+    };
+    document.addEventListener('keydown', handleEsc);
   }
 
   // 开始重命名

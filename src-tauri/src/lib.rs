@@ -54,6 +54,20 @@ async fn scan_pdf_files(directory: String, state: State<'_, AppState>) -> Result
         }
     }
     
+    // 解决重名冲突
+    // 第一步：解决批量文件内部的重名冲突
+    let resolved_names = naming_engine.resolve_naming_conflicts(&files);
+    
+    // 第二步：检查并解决与目录中已存在文件的冲突
+    let final_names = naming_engine.resolve_directory_conflicts(&directory, &resolved_names);
+    
+    // 第三步：将最终解决冲突后的文件名更新到每个文件
+    for (i, file) in files.iter_mut().enumerate() {
+        if let Some(final_name) = final_names.get(i) {
+            file.suggested_name = Some(final_name.clone());
+        }
+    }
+    
     Ok(files)
 }
 

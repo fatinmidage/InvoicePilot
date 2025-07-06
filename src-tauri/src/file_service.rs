@@ -156,7 +156,6 @@ impl FileService {
     }
 
     /// 解决文件名冲突
-    #[allow(dead_code)]
     pub fn resolve_filename_conflict(&self, directory: &str, filename: &str) -> String {
         let path = Path::new(directory);
         let mut counter = 1;

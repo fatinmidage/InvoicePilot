@@ -49,7 +49,6 @@ impl NamingEngine {
     }
 
     /// 解决文件名冲突
-    #[allow(dead_code)]
     pub fn resolve_naming_conflicts(&self, files: &[PdfFile]) -> Vec<String> {
         let mut name_counts = std::collections::HashMap::new();
         let mut resolved_names = Vec::new();
@@ -76,7 +75,6 @@ impl NamingEngine {
     }
 
     /// 分离文件名和扩展名
-    #[allow(dead_code)]
     fn split_filename(&self, filename: &str) -> (String, String) {
         let path = Path::new(filename);
         let stem = path.file_stem()
@@ -151,7 +149,6 @@ impl NamingEngine {
     }
 
     /// 为存在冲突的文件生成替代名称
-    #[allow(dead_code)]
     pub fn resolve_directory_conflicts(&self, directory: &str, filenames: &[String]) -> Vec<String> {
         filenames.iter()
             .map(|filename| {
