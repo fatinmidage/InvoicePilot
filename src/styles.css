@@ -159,7 +159,8 @@ body {
   gap: var(--spacing-md);
   padding: var(--spacing-md);
   flex: 1;
-  overflow: visible;
+  overflow: hidden;
+  min-height: 0;
 }
 
 /* 左侧文件列表区域 */
@@ -170,7 +171,8 @@ body {
   border-radius: 8px;
   border: 1px solid var(--color-border-default);
   overflow: hidden;
-  height: 350px;
+  height: 100%;
+  min-height: 0;
 }
 
 .section-header {
@@ -258,7 +260,7 @@ body {
   flex: 1;
   overflow-y: auto;
   padding: var(--spacing-xs) var(--spacing-md);
-  max-height: 290px; /* 调整最大高度以配合父容器350px */
+  min-height: 0; /* 允许flexbox收缩 */
   scrollbar-width: thin; /* Firefox 滚动条宽度 */
   scrollbar-color: var(--color-border-default) transparent; /* Firefox 滚动条颜色 */
 }
@@ -361,7 +363,8 @@ body {
   border-radius: 8px;
   border: 1px solid var(--color-border-default);
   border-left: 1px solid var(--color-border-default);
-  height: 350px;
+  height: 100%;
+  min-height: 0;
 }
 
 .panel-section {
@@ -435,7 +438,7 @@ body {
   padding: var(--spacing-lg);
   text-align: center;
   min-height: 80px;
-  max-height: 200px;
+  flex: 1;
   display: flex;
   align-items: flex-start;
   justify-content: center;
