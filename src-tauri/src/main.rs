@@ -2,5 +2,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    invoicepilot_lib::run()
+    // 运行应用程序
+    invoicepilot_lib::run();
 }

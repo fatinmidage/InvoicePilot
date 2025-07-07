@@ -5,12 +5,14 @@ mod config;
 mod pdf_service;
 mod file_service;
 mod naming_engine;
+pub mod directory_utils;
 
 use types::*;
 use config::*;
 use pdf_service::*;
 use file_service::*;
 use naming_engine::*;
+use directory_utils::*;
 
 use std::sync::Mutex;
 use tauri::State;
@@ -21,6 +23,7 @@ struct AppState {
     pdf_parser: Mutex<PdfParser>,
     file_service: Mutex<FileService>,
     naming_engine: Mutex<NamingEngine>,
+    directory_utils: Mutex<DirectoryUtils>,
 }
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
@@ -68,6 +71,37 @@ async fn scan_pdf_files(directory: String, state: State<'_, AppState>) -> Result
         }
     }
     
+    Ok(files)
+}
+
+/// 扫描指定目录中的图片文件
+#[tauri::command]
+async fn scan_image_files(directory: String, state: State<'_, AppState>) -> Result<Vec<ImageFile>, String> {
+    let file_service = state.file_service.lock().unwrap();
+    let naming_engine = state.naming_engine.lock().unwrap();
+    
+    // 扫描图片文件
+    let mut files = file_service.scan_image_files(&directory)
+        .map_err(|e| e.to_string())?;
+    
+    // 为每个图片文件生成建议文件名（基于时间戳）
+    for file in &mut files {
+        let suggested_name = naming_engine.generate_image_filename(&file.name, &file.modified);
+        file.suggested_name = Some(suggested_name);
+    }
+    
+    // 解决重名冲突
+    let resolved_names = naming_engine.resolve_image_naming_conflicts(&files);
+    
+    // 检查并解决与目录中已存在文件的冲突
+    let final_names = naming_engine.resolve_directory_conflicts(&directory, &resolved_names);
+    
+    // 将最终解决冲突后的文件名更新到每个文件
+    for (i, file) in files.iter_mut().enumerate() {
+        if let Some(final_name) = final_names.get(i) {
+            file.suggested_name = Some(final_name.clone());
+        }
+    }
     Ok(files)
 }
 
@@ -159,56 +193,10 @@ async fn execute_rename(renames: Vec<RenameOperation>, state: State<'_, AppState
 
 /// 选择目录
 #[tauri::command]
-async fn select_directory() -> Result<String, String> {
-    // 获取应用程序所在的目录
-    
-    // 首先尝试获取可执行文件所在的目录
-    if let Ok(exe_path) = std::env::current_exe() {
-        if let Some(exe_dir) = exe_path.parent() {
-            if let Some(exe_dir_str) = exe_dir.to_str() {
-                // 在 macOS 应用包中，可执行文件通常在 .app/Contents/MacOS/ 目录下
-                // 我们需要找到一个更合适的目录
-                let exe_dir_path = std::path::Path::new(exe_dir_str);
-                
-                // 如果在 .app 包中，尝试找到应用包的父目录
-                if exe_dir_str.contains(".app/Contents/MacOS") {
-                    // 向上查找到 .app 目录，然后取其父目录
-                    let mut current_path = exe_dir_path;
-                    while let Some(parent) = current_path.parent() {
-                        if let Some(parent_str) = parent.to_str() {
-                            if parent_str.ends_with(".app") {
-                                // 找到了 .app 目录，返回其父目录
-                                if let Some(app_parent) = parent.parent() {
-                                    if let Some(app_parent_str) = app_parent.to_str() {
-                                        return Ok(app_parent_str.to_string());
-                                    }
-                                }
-                                break;
-                            }
-                        }
-                        current_path = parent;
-                    }
-                }
-                
-                // 如果不在 .app 包中，直接返回可执行文件所在目录
-                return Ok(exe_dir_str.to_string());
-            }
-        }
-    }
-    
-    // 尝试获取当前工作目录（但跳过根目录）
-    if let Ok(current_dir) = std::env::current_dir() {
-        if let Some(current_dir_str) = current_dir.to_str() {
-            if current_dir_str != "/" {
-                return Ok(current_dir_str.to_string());
-            }
-        }
-    }
-    
-    // 如果都失败了，返回用户主目录
-    let home_dir = std::env::var("HOME")
-        .unwrap_or_else(|_| "/Users".to_string());
-    Ok(home_dir)
+async fn select_directory(state: State<'_, AppState>) -> Result<String, String> {
+    let directory_utils = state.directory_utils.lock().unwrap();
+    let directory = directory_utils.get_current_directory()?;
+    Ok(directory)
 }
 
 /// 获取应用配置
@@ -237,8 +225,29 @@ async fn reset_config(state: State<'_, AppState>) -> Result<(), String> {
 /// 验证目录权限
 #[tauri::command]
 async fn validate_directory(directory: String, state: State<'_, AppState>) -> Result<bool, String> {
-    let file_service = state.file_service.lock().unwrap();
-    Ok(file_service.is_directory_writable(&directory))
+    let directory_utils = state.directory_utils.lock().unwrap();
+    Ok(directory_utils.is_directory_writable(&directory))
+}
+
+/// 验证目录是否有效
+#[tauri::command]
+async fn validate_directory_exists(directory: String, state: State<'_, AppState>) -> Result<bool, String> {
+    let directory_utils = state.directory_utils.lock().unwrap();
+    Ok(directory_utils.is_directory_valid(&directory))
+}
+
+/// 获取目录的父目录
+#[tauri::command]
+async fn get_parent_directory(directory: String, state: State<'_, AppState>) -> Result<Option<String>, String> {
+    let directory_utils = state.directory_utils.lock().unwrap();
+    Ok(directory_utils.get_parent_directory(&directory))
+}
+
+/// 规范化目录路径
+#[tauri::command]
+async fn normalize_directory_path(path: String, state: State<'_, AppState>) -> Result<String, String> {
+    let directory_utils = state.directory_utils.lock().unwrap();
+    Ok(directory_utils.normalize_path(&path))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -249,6 +258,7 @@ pub fn run() {
         pdf_parser: Mutex::new(PdfParser::new()),
         file_service: Mutex::new(FileService::new()),
         naming_engine: Mutex::new(NamingEngine::new()),
+        directory_utils: Mutex::new(DirectoryUtils::new()),
     };
     
     tauri::Builder::default()
@@ -257,6 +267,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             greet,
             scan_pdf_files,
+            scan_image_files,
             analyze_pdf_content,
             preview_rename,
             execute_rename,
@@ -264,7 +275,10 @@ pub fn run() {
             get_config,
             update_config,
             reset_config,
-            validate_directory
+            validate_directory,
+            validate_directory_exists,
+            get_parent_directory,
+            normalize_directory_path
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

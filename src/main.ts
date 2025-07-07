@@ -13,6 +13,17 @@ interface FileItem {
   selected: boolean;
 }
 
+// 图片文件接口定义
+interface ImageFile {
+  id: string;
+  name: string;
+  path: string;
+  size: number;
+  modified: string;
+  suggested_name?: string;
+  selected: boolean;
+}
+
 // 重命名操作接口
 interface RenameOperation {
   old_path: string;
@@ -31,9 +42,9 @@ interface RenameResult {
 // Tab管理器
 class TabManager {
   private currentTab: string = 'pdf';
-  private onTabChange: (tab: string) => void;
+  private onTabChange: (tab: string) => Promise<void>;
 
-  constructor(onTabChange: (tab: string) => void) {
+  constructor(onTabChange: (tab: string) => Promise<void>) {
     this.onTabChange = onTabChange;
     this.bindEvents();
   }
@@ -50,7 +61,7 @@ class TabManager {
     });
   }
 
-  private switchTab(tabId: string) {
+  private async switchTab(tabId: string) {
     if (this.currentTab === tabId) return;
 
     // 更新按钮状态
@@ -66,7 +77,9 @@ class TabManager {
     document.getElementById(`${tabId}-tab`)?.classList.add('active');
 
     this.currentTab = tabId;
-    this.onTabChange(tabId);
+    
+    // 等待异步操作完成
+    await this.onTabChange(tabId);
   }
 
   getCurrentTab(): string {
@@ -79,6 +92,7 @@ class AppState {
   files: FileItem[] = [];
   selectedFiles: Set<string> = new Set();
   currentDirectory: string = "";
+  currentTab: string = "pdf";
 
   constructor() {
     // 不在构造函数中调用异步方法
@@ -91,32 +105,50 @@ class AppState {
       this.currentDirectory = await invoke<string>('select_directory');
       await this.loadFiles();
     } catch (error) {
-      console.error('初始化文件列表失败:', error);
-      // 如果失败，使用默认目录
-      this.currentDirectory = "/Users/Documents";
+      console.error('❌ 初始化文件列表失败:', error);
+      // 如果失败，显示错误状态
+      this.currentDirectory = "获取目录失败";
+      this.files = [];
     }
   }
 
-  // 加载文件列表
+  // 加载文件列表（根据当前tab类型）
   async loadFiles() {
     try {
-      const files = await invoke<FileItem[]>('scan_pdf_files', { 
-        directory: this.currentDirectory 
-      });
-      
-      this.files = files.map(file => ({
-        ...file,
-        selected: false
-      }));
+      if (this.currentTab === 'pdf') {
+        const files = await invoke<FileItem[]>('scan_pdf_files', { 
+          directory: this.currentDirectory 
+        });
+        
+        this.files = files.map(file => ({
+          ...file,
+          selected: false
+        }));
+      } else if (this.currentTab === 'image') {
+        const files = await invoke<ImageFile[]>('scan_image_files', { 
+          directory: this.currentDirectory 
+        });
+        
+        this.files = files.map(file => ({
+          ...file,
+          selected: false
+        }));
+      }
       
       // 清空选择状态
       this.selectedFiles.clear();
     } catch (error) {
-      console.error('加载文件列表失败:', error);
+      console.error('❌ 加载文件列表失败:', error);
       this.files = [];
       // 发生错误时也要清空选择状态
       this.selectedFiles.clear();
     }
+  }
+
+  // 设置当前tab并重新加载文件
+  async setCurrentTab(tab: string) {
+    this.currentTab = tab;
+    await this.loadFiles();
   }
 
   // 设置当前目录
@@ -183,23 +215,41 @@ class UIManager {
     this.render();
   }
 
-  // 初始化DOM元素
+  // 根据当前tab动态获取正确的元素
+  private getCurrentElements() {
+    const isImageTab = this.appState.currentTab === 'image';
+    
+    return {
+      fileListElement: document.getElementById(isImageTab ? "image-file-list" : "file-list") as HTMLElement,
+      selectAllCheckbox: document.getElementById(isImageTab ? "image-select-all" : "select-all") as HTMLInputElement,
+      selectAllLabel: document.querySelector(isImageTab ? '#image-tab .select-all-label' : '#pdf-tab .select-all-label') as HTMLElement,
+      startRenameButton: document.getElementById(isImageTab ? "start-image-rename" : "start-rename") as HTMLButtonElement,
+      previewArea: document.getElementById(isImageTab ? "image-preview-area" : "preview-area") as HTMLElement
+    };
+  }
+
   private initializeElements() {
-    this.fileListElement = document.getElementById("file-list") as HTMLElement;
-    this.selectAllCheckbox = document.getElementById("select-all") as HTMLInputElement;
-    this.selectAllLabel = document.querySelector(".select-all-label") as HTMLElement;
-    this.startRenameButton = document.getElementById("start-rename") as HTMLButtonElement;
-    this.previewArea = document.getElementById("preview-area") as HTMLElement;
+    // 初始化默认元素（PDF标签页）
+    const elements = this.getCurrentElements();
+    this.fileListElement = elements.fileListElement;
+    this.selectAllCheckbox = elements.selectAllCheckbox;
+    this.selectAllLabel = elements.selectAllLabel;
+    this.startRenameButton = elements.startRenameButton;
+    this.previewArea = elements.previewArea;
+  }
+
+  // 更新当前元素引用
+  private updateCurrentElements() {
+    const elements = this.getCurrentElements();
+    this.fileListElement = elements.fileListElement;
+    this.selectAllCheckbox = elements.selectAllCheckbox;
+    this.selectAllLabel = elements.selectAllLabel;
+    this.startRenameButton = elements.startRenameButton;
+    this.previewArea = elements.previewArea;
   }
 
   // 绑定事件
   private bindEvents() {
-    // 全选复选框事件
-    this.selectAllCheckbox.addEventListener("change", () => {
-      this.appState.toggleSelectAll();
-      this.render();
-    });
-
     // 刷新按钮事件
     document.getElementById("refresh-btn")?.addEventListener("click", () => {
       this.refreshFiles();
@@ -210,14 +260,47 @@ class UIManager {
       this.openSettings();
     });
 
+    // 绑定两个标签页的全选和重命名按钮事件
+    this.bindTabEvents('pdf');
+    this.bindTabEvents('image');
+  }
+
+  // 为特定标签页绑定事件
+  private bindTabEvents(tabType: 'pdf' | 'image') {
+    const prefix = tabType === 'image' ? 'image-' : '';
+    
+    // 全选复选框事件
+    const selectAllCheckbox = document.getElementById(`${prefix}select-all`) as HTMLInputElement;
+    if (selectAllCheckbox) {
+      selectAllCheckbox.addEventListener("change", () => {
+        if (this.appState.currentTab === tabType) {
+          this.appState.toggleSelectAll();
+          this.render();
+        }
+      });
+    }
+
     // 开始重命名按钮事件
-    this.startRenameButton.addEventListener("click", () => {
-      this.startRename();
-    });
+    const startRenameButton = document.getElementById(`${prefix === 'image-' ? 'start-image-rename' : 'start-rename'}`) as HTMLButtonElement;
+    if (startRenameButton) {
+      startRenameButton.addEventListener("click", () => {
+        if (this.appState.currentTab === tabType) {
+          this.startRename();
+        }
+      });
+    }
   }
 
   // 渲染文件列表
   private renderFileList() {
+    // 更新当前元素引用
+    this.updateCurrentElements();
+    
+    if (!this.fileListElement) {
+      console.error('文件列表元素未找到');
+      return;
+    }
+
     this.fileListElement.innerHTML = "";
 
     this.appState.files.forEach(file => {
@@ -229,9 +312,12 @@ class UIManager {
       // 格式化修改时间
       const formattedDate = this.formatDate(file.modified);
       
+      // 根据当前tab显示不同的图标
+      const fileIcon = this.appState.currentTab === 'pdf' ? '📄' : '🖼️';
+      
       fileItemElement.innerHTML = `
         <input type="checkbox" class="checkbox file-checkbox" data-file-id="${file.id}" ${file.selected ? "checked" : ""}>
-        <div class="file-icon">📄</div>
+        <div class="file-icon">${fileIcon}</div>
         <div class="file-info">
           <div class="file-name" title="${file.name}">${file.name}</div>
           <div class="file-meta">${formattedSize} • ${formattedDate}</div>
@@ -280,6 +366,14 @@ class UIManager {
 
   // 渲染统计信息
   private renderStats() {
+    // 更新当前元素引用
+    this.updateCurrentElements();
+    
+    if (!this.selectAllLabel || !this.selectAllCheckbox || !this.startRenameButton) {
+      console.error('统计信息元素未找到');
+      return;
+    }
+
     const selectedCount = this.appState.getSelectedCount();
     const totalCount = this.appState.getTotalCount();
 
@@ -305,11 +399,20 @@ class UIManager {
 
   // 渲染预览区域
   private renderPreview() {
+    // 更新当前元素引用
+    this.updateCurrentElements();
+    
+    if (!this.previewArea) {
+      console.error('预览区域元素未找到');
+      return;
+    }
+
     const selectedFiles = this.appState.getSelectedFiles();
     
     if (selectedFiles.length === 0) {
+      const fileType = this.appState.currentTab === 'pdf' ? '文件' : '图片文件';
       this.previewArea.innerHTML = `
-        <p class="placeholder-text">请选择要重命名的文件</p>
+        <p class="placeholder-text">请选择要重命名的${fileType}</p>
       `;
     } else {
       this.previewArea.innerHTML = `
@@ -325,17 +428,21 @@ class UIManager {
     }
   }
 
-  // 生成新文件名（基于PDF解析结果）
+  // 生成新文件名（根据文件类型）
   private generateNewName(file: FileItem): string {
     if (file.suggested_name) {
       return file.suggested_name;
     }
     
-    if (file.amount) {
-      return `${file.amount.toFixed(2)}元_发票.pdf`;
+    if (this.appState.currentTab === 'pdf') {
+      if (file.amount) {
+        return `${file.amount.toFixed(2)}元_发票.pdf`;
+      }
+      return "未知金额_发票.pdf";
+    } else {
+      // 图片文件保持原文件名
+      return file.name;
     }
-    
-    return "未知金额_发票.pdf";
   }
 
   // 切换文件选择状态
@@ -346,7 +453,6 @@ class UIManager {
 
   // 刷新文件列表
   private async refreshFiles() {
-    console.log("刷新文件列表");
     try {
       await this.appState.loadFiles();
       this.render();
@@ -358,8 +464,6 @@ class UIManager {
 
   // 打开设置
   private openSettings() {
-    console.log("打开设置");
-    
     // 创建设置对话框
     const settingsHTML = `
       <div class="settings-overlay">
@@ -430,8 +534,6 @@ class UIManager {
     const selectedFiles = this.appState.getSelectedFiles();
     if (selectedFiles.length === 0) return;
 
-    console.log("开始重命名", selectedFiles);
-    
     try {
       this.startRenameButton.disabled = true;
       this.startRenameButton.textContent = "重命名中...";
@@ -442,10 +544,17 @@ class UIManager {
         const lastSeparatorIndex = Math.max(file.path.lastIndexOf('/'), file.path.lastIndexOf('\\'));
         const directory = file.path.substring(0, lastSeparatorIndex);
         const separator = file.path.includes('\\') ? '\\' : '/';
-        const newFileName = file.suggested_name || `${file.amount?.toFixed(2) || '未知金额'}元_发票.pdf`;
-        const newPath = `${directory}${separator}${newFileName}`;
         
-        console.log(`重命名操作: ${file.path} -> ${newPath}`);
+        // 根据当前tab类型生成不同的默认文件名
+        let newFileName: string;
+        if (this.appState.currentTab === 'pdf') {
+          newFileName = file.suggested_name || `${file.amount?.toFixed(2) || '未知金额'}元_发票.pdf`;
+        } else {
+          // 图片文件使用suggested_name，如果没有则保持原名
+          newFileName = file.suggested_name || file.name;
+        }
+        
+        const newPath = `${directory}${separator}${newFileName}`;
         
         return {
           old_path: file.path,
@@ -496,7 +605,6 @@ class UIManager {
 
   // 公共刷新方法
   public async refresh() {
-    console.log("刷新文件列表");
     try {
       await this.appState.loadFiles();
       this.render();
@@ -517,7 +625,21 @@ class UIManager {
     
     if (fileCountElement) {
       const totalFiles = this.appState.getTotalCount();
-      fileCountElement.textContent = `${totalFiles} 个PDF文件`;
+      const fileType = this.appState.currentTab === 'pdf' ? 'PDF' : '图片';
+      fileCountElement.textContent = `${totalFiles} 个${fileType}文件`;
+    }
+    
+    // 同时更新图片标签页的目录显示
+    const imageDirectoryElement = document.getElementById("image-current-directory");
+    const imageFileCountElement = document.getElementById("image-file-count");
+    
+    if (imageDirectoryElement) {
+      imageDirectoryElement.textContent = this.appState.currentDirectory || "未选择目录";
+    }
+    
+    if (imageFileCountElement) {
+      const totalFiles = this.appState.getTotalCount();
+      imageFileCountElement.textContent = `${totalFiles} 个图片文件`;
     }
   }
 }
@@ -533,19 +655,17 @@ window.addEventListener("DOMContentLoaded", async () => {
     const uiManager = new UIManager(appState);
     
     // 初始化Tab管理器
-    const tabManager = new TabManager((tabId: string) => {
-      console.log(`切换到标签页: ${tabId}`);
+    const tabManager = new TabManager(async (tabId: string): Promise<void> => {
+      // 更新AppState的当前tab并重新加载文件
+      await appState.setCurrentTab(tabId);
+      uiManager.render();
+      
       // 根据当前标签页更新刷新按钮的行为
       const refreshBtn = document.getElementById("refresh-btn");
       if (refreshBtn) {
-                 refreshBtn.onclick = () => {
-           if (tabId === 'pdf') {
-             uiManager.refresh();
-           } else {
-             // 图片标签页的刷新逻辑将在后续实现
-             console.log('图片标签页刷新功能待实现');
-           }
-         };
+        refreshBtn.onclick = () => {
+          uiManager.refresh();
+        };
       }
     });
     
@@ -553,15 +673,14 @@ window.addEventListener("DOMContentLoaded", async () => {
     (window as any).uiManager = uiManager;
     (window as any).tabManager = tabManager;
     
-    console.log("InvoicePilot 应用已启动");
   } catch (error) {
     console.error("应用初始化失败:", error);
     // 如果初始化失败，仍然创建UI但使用空状态
     const appState = new AppState();
     appState.files = [];
     const uiManager = new UIManager(appState);
-    const tabManager = new TabManager((tabId: string) => {
-      console.log(`切换到标签页: ${tabId}`);
+    const tabManager = new TabManager(async (tabId: string): Promise<void> => {
+      // 切换标签页处理（错误状态下的回调）
     });
     (window as any).uiManager = uiManager;
     (window as any).tabManager = tabManager;

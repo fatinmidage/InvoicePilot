@@ -1,6 +1,7 @@
 use std::path::Path;
-use crate::types::{PdfFile, RenamePreview};
+use crate::types::{PdfFile, ImageFile, RenamePreview};
 use crate::file_service::FileService;
+use chrono::{DateTime, Utc};
 
 pub struct NamingEngine {
     #[allow(dead_code)]
@@ -18,6 +19,14 @@ impl NamingEngine {
     /// 格式：{金额}元_发票.pdf
     pub fn generate_filename(&self, amount: f64) -> String {
         format!("{:.2}元_发票.pdf", amount)
+    }
+
+    /// 为图片文件生成建议的文件名
+    /// 格式：支付凭证_{YYYY-MM-DD}_{原文件名}.{扩展名}
+    pub fn generate_image_filename(&self, original_name: &str, modified: &DateTime<Utc>) -> String {
+        let date_str = modified.format("%Y-%m-%d").to_string();
+        let (stem, ext) = self.split_filename(original_name);
+        format!("支付凭证_{}_{}.{}", date_str, stem, ext)
     }
 
     /// 格式化金额显示
@@ -55,6 +64,32 @@ impl NamingEngine {
 
         for file in files {
             let base_name = self.generate_suggested_name(file);
+            
+            // 检查是否有冲突
+            let count = name_counts.entry(base_name.clone()).or_insert(0);
+            *count += 1;
+
+            let final_name = if *count == 1 {
+                base_name
+            } else {
+                // 处理冲突：添加序号
+                let (stem, ext) = self.split_filename(&base_name);
+                format!("{}_{}.{}", stem, count, ext)
+            };
+
+            resolved_names.push(final_name);
+        }
+
+        resolved_names
+    }
+
+    /// 解决图片文件名冲突
+    pub fn resolve_image_naming_conflicts(&self, files: &[ImageFile]) -> Vec<String> {
+        let mut name_counts = std::collections::HashMap::new();
+        let mut resolved_names = Vec::new();
+
+        for file in files {
+            let base_name = self.generate_image_filename(&file.name, &file.modified);
             
             // 检查是否有冲突
             let count = name_counts.entry(base_name.clone()).or_insert(0);

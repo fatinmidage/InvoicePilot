@@ -2,7 +2,7 @@ use std::path::Path;
 use std::fs;
 use walkdir::WalkDir;
 use chrono::{DateTime, Utc};
-use crate::types::PdfFile;
+use crate::types::{PdfFile, ImageFile};
 
 pub struct FileService;
 
@@ -50,6 +50,47 @@ impl FileService {
         Ok(pdf_files)
     }
 
+    /// 扫描指定目录中的图片文件
+    pub fn scan_image_files(&self, directory_path: &str) -> Result<Vec<ImageFile>, String> {
+        let path = Path::new(directory_path);
+        
+        if !path.exists() {
+            return Err("目录不存在".to_string());
+        }
+
+        if !path.is_dir() {
+            return Err("路径不是目录".to_string());
+        }
+
+        let mut image_files = Vec::new();
+        let supported_extensions = ["jpg", "jpeg", "png", "gif", "bmp", "tiff", "webp"];
+        
+        for entry in WalkDir::new(path)
+            .min_depth(1)
+            .max_depth(1)
+            .into_iter()
+            .filter_map(|e| e.ok())
+        {
+            let path = entry.path();
+            
+            if path.is_file() {
+                if let Some(extension) = path.extension() {
+                    let ext = extension.to_string_lossy().to_lowercase();
+                    if supported_extensions.contains(&ext.as_str()) {
+                        match self.create_image_file_info(path) {
+                            Ok(image_file) => image_files.push(image_file),
+                            Err(e) => {
+                                eprintln!("处理图片文件时出错 {}: {}", path.display(), e);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(image_files)
+    }
+
     /// 创建PdfFile信息
     pub fn create_pdf_file_info(&self, path: &Path) -> Result<PdfFile, String> {
         let metadata = fs::metadata(path)
@@ -79,6 +120,38 @@ impl FileService {
             size,
             modified: modified_dt,
             amount: None,
+            suggested_name: None,
+        })
+    }
+
+    /// 创建ImageFile信息
+    pub fn create_image_file_info(&self, path: &Path) -> Result<ImageFile, String> {
+        let metadata = fs::metadata(path)
+            .map_err(|e| format!("无法获取文件信息: {}", e))?;
+
+        let file_name = path.file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("unknown.jpg")
+            .to_string();
+
+        let file_path = path.to_string_lossy().to_string();
+
+        let size = metadata.len();
+        
+        let modified = metadata.modified()
+            .map_err(|e| format!("无法获取修改时间: {}", e))?;
+        
+        let modified_dt: DateTime<Utc> = modified.into();
+
+        // 生成唯一ID
+        let id = format!("{}", path.display()).replace('/', "_").replace('\\', "_");
+
+        Ok(ImageFile {
+            id,
+            name: file_name,
+            path: file_path,
+            size,
+            modified: modified_dt,
             suggested_name: None,
         })
     }
@@ -188,23 +261,5 @@ impl FileService {
             .map(|p| p.to_string_lossy().to_string())
     }
 
-    /// 检查目录是否可写
-    pub fn is_directory_writable(&self, directory_path: &str) -> bool {
-        let path = Path::new(directory_path);
-        
-        if !path.exists() || !path.is_dir() {
-            return false;
-        }
 
-        // 尝试创建一个临时文件来测试写权限
-        let temp_file = path.join(".temp_write_test");
-        match fs::File::create(&temp_file) {
-            Ok(_) => {
-                // 清理临时文件
-                let _ = fs::remove_file(&temp_file);
-                true
-            }
-            Err(_) => false,
-        }
-    }
 } 

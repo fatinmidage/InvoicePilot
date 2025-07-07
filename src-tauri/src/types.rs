@@ -13,6 +13,16 @@ pub struct PdfFile {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct ImageFile {
+    pub id: String,
+    pub name: String,
+    pub path: String,
+    pub size: u64,
+    pub modified: DateTime<Utc>,
+    pub suggested_name: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct InvoiceInfo {
     pub amount: Option<f64>,
     pub original_filename: String,

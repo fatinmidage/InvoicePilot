@@ -500,6 +500,7 @@ body {
   flex-direction: column;
   gap: var(--spacing-md);
   overflow: hidden;
+  min-height: 0;
 }
 
 .operation-card {
@@ -511,11 +512,14 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  overflow: hidden;
 }
 
 .operation-card.preview-card {
   flex: 1;
   min-height: 0;
+  max-height: calc(100vh - 300px); /* 限制最大高度，防止越界 */
+  overflow: hidden;
 }
 
 .operation-card:hover {
@@ -523,8 +527,10 @@ body {
 }
 
 /* 预览区域专门样式 */
-#preview-area {
+#preview-area, #image-preview-area {
   margin-top: 0;
+  max-height: calc(100vh - 400px); /* 为图片预览区域也添加高度限制 */
+  overflow-y: auto;
 }
 
 .operation-title {
@@ -583,6 +589,7 @@ body {
   padding: var(--spacing-md);
   text-align: center;
   min-height: 120px;
+  max-height: calc(100vh - 450px); /* 限制最大高度 */
   flex: 1;
   display: flex;
   align-items: flex-start;
@@ -636,6 +643,8 @@ body {
   -webkit-user-select: none;
   -moz-user-select: none;
   -ms-user-select: none;
+  max-height: 100%;
+  overflow-y: auto;
 }
 
 /* 预览标题样式 */
@@ -662,6 +671,7 @@ body {
   -webkit-user-select: none;
   -moz-user-select: none;
   -ms-user-select: none;
+  flex-shrink: 0;
 }
 
 .preview-item .original-name {
@@ -671,6 +681,7 @@ body {
   -webkit-user-select: none;
   -moz-user-select: none;
   -ms-user-select: none;
+  word-break: break-word;
 }
 
 .preview-item .new-name {
@@ -680,6 +691,7 @@ body {
   -webkit-user-select: none;
   -moz-user-select: none;
   -ms-user-select: none;
+  word-break: break-word;
 }
 
 .action-buttons {
@@ -768,6 +780,18 @@ body {
   
   .operations-panel {
     order: -1;
+  }
+  
+  .operation-card.preview-card {
+    max-height: 300px; /* 移动端降低高度限制 */
+  }
+  
+  .preview-placeholder {
+    max-height: 250px; /* 移动端降低高度限制 */
+  }
+  
+  #preview-area, #image-preview-area {
+    max-height: 200px; /* 移动端降低高度限制 */
   }
 }
 
